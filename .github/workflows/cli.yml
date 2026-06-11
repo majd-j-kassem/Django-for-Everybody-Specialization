@@ -1,0 +1,124 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    types: [opened, closed]
+  workflow_dispatch:
+
+jobs:
+  run-ci-pipeline:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff pytest pytest-django bandit
+
+      - name: Run Tests (Pytest)
+        env:
+          DATABASE_URL: postgresql://user:password@localhost:5432/robovector_db
+        run: pytest
+
+      - name: Send Mattermost notification
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          REPO="${{ github.repository }}"
+          BRANCH="${{ github.ref_name }}"
+          AUTHOR="${{ github.actor }}"
+          COMMIT_SHA="${{ github.sha }}"
+          SHORT_SHA=${COMMIT_SHA:0:7}
+          EVENT_NAME="${{ github.event_name }}"
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          if [ "$EVENT_NAME" == "push" ]; then
+            if [[ "${{ github.event.head_commit.message }}" == *"Merge pull request"* ]]; then
+              echo "Merge detected, skipping push notification."
+              exit 0
+            fi
+            EVENT_TYPE="🚀 Developer Push"
+            MSG="${{ github.event.head_commit.message }}"
+
+          elif [ "$EVENT_NAME" == "pull_request" ]; then
+            if [ "${{ github.event.action }}" == "opened" ]; then
+              EVENT_TYPE="📂 PR Opened"
+              MSG="${{ github.event.pull_request.title }}"
+            elif [ "${{ github.event.action }}" == "closed" ] && [ "${{ github.event.pull_request.merged }}" == "true" ]; then
+              EVENT_TYPE="✅ PR Merged"
+              MSG="${{ github.event.pull_request.title }}"
+            else
+              echo "Ignoring PR action: ${{ github.event.action }}"
+              exit 0
+            fi
+          else
+            EVENT_TYPE="ℹ️ Other ($EVENT_NAME)"
+            MSG="Event not explicitly tracked"
+          fi
+
+          if [ "$STATUS" = "success" ]; then
+            EMOJI="✅"
+            COLOR="#00FF00"
+          else
+            EMOJI="❌"
+            COLOR="#FF0000"
+          fi
+
+          TEXT="**RoboVector CI Notification**\n\n${EMOJI} **Status**: ${STATUS}\n**Event**: ${EVENT_TYPE}\n- **Repo**: ${REPO}\n- **Branch**: ${BRANCH}\n- **Author**: ${AUTHOR}\n- **Commit**: \`${SHORT_SHA}\`\n- **Message**: ${MSG}\n- **Link**: [View Run](${RUN_URL})"
+
+          curl -X POST -H "Content-Type: application/json" \
+          -d "{\"attachments\": [{\"color\": \"$COLOR\", \"text\": \"$TEXT\"}]}" \
+          ${{ secrets.MATTERMOST_WEBHOOK_URL }}
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: run-ci-pipeline
+    if: |
+      github.event_name == 'push' && github.ref == 'refs/heads/main' || 
+      github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
+    
+    steps:
+      - name: Deploy to PythonAnywhere via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PA_HOST }}
+          username: ${{ github.actor }} # أو اسم مستخدم PythonAnywhere مباشرة
+          key: ${{ secrets.PA_SSH_KEY }}
+          script: |
+            cd /home/${{ github.actor }}/my-project-dir  # استبدل بمجال مشروعك هناك
+            git pull origin main
+            source myenv/bin/activate                  # استبدل باسم بيئتك التخيلية
+            pip install -r requirements.txt
+            python manage.py migrate --noinput
+            python manage.py collectstatic --noinput
+            touch /var/www/${{ github.actor }}_pythonanywhere_com_wsgi.py # استبدل باسم ملف الـ WSGI الخاص بك
+
+      - name: Send Mattermost Deployment Notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            EMOJI="🚀"
+            COLOR="#0000FF"
+            TEXT="**RoboVector Deployment Notification**\n\n${EMOJI} **Status**: Deployed Successfully to PythonAnywhere!"
+          else
+            EMOJI="⚠️"
+            COLOR="#FFCC00"
+            TEXT="**RoboVector Deployment Notification**\n\n${EMOJI} **Status**: Deployment Failed!"
+          fi
+          
+          curl -X POST -H "Content-Type: application/json" \
+          -d "{\"attachments\": [{\"color\": \"$COLOR\", \"text\": \"$TEXT\"}]}" \
+          ${{ secrets.MATTERMOST_WEBHOOK_URL }}
