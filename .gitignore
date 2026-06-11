@@ -1,0 +1,19 @@
+# Ignore the virtual environment folder
+venv/
+/venv/
+ENV/
+.venv/
+
+_pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# SQLite database (contains your local test data)
+*.sqlite3
+
+# Local environment variables
+.env
+
+# VS Code
+.vscode/
