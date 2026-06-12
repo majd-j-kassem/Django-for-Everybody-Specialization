@@ -29,7 +29,6 @@ jobs:
           pip install ruff pytest pytest-django bandit
 
       - name: Run Tests (Pytest)
-
         run: |
           cd majdsite
           pytest
@@ -94,16 +93,21 @@ jobs:
     steps:
       - name: Reload PythonAnywhere Web App
         run: |
-          curl -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_DOMAIN }}/reload/" \
-          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
+          # API is restricted for free accounts. Uncomment only if you have a paid plan.
+          echo "Skipping API reload for free tier account."
+          # curl -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_DOMAIN }}/reload/" \
+          # -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
 
       - name: Send Mattermost Deployment Notification
         if: always()
         run: |
+          SITE_LINK="https://majdkassem.pythonanywhere.com/admin/"
+          SRC_LINK="https://www.pythonanywhere.com/user/majdkassem/files/home/majdkassem/Django-for-Everybody-Specialization"
+
           if [ "${{ job.status }}" = "success" ]; then
             EMOJI="🚀"
             COLOR="#0000FF"
-            TEXT="**RoboVector Deployment Notification**\n\n${EMOJI} **Status**: Reloaded Successfully on PythonAnywhere!"
+            TEXT="**RoboVector Deployment Notification**\n\n${EMOJI} **Status**: Reloaded Successfully on PythonAnywhere!\n\n- **Admin Site**: ${SITE_LINK}\n- **Source Files**: ${SRC_LINK}"
           else
             EMOJI="⚠️"
             COLOR="#FFCC00"
