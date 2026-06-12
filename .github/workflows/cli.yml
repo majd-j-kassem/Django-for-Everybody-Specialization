@@ -29,7 +29,10 @@ jobs:
           pip install ruff pytest pytest-django bandit
 
       - name: Run Tests (Pytest)
-        run: pytest
+
+        run: |
+          cd majdsite
+          pytest
 
       - name: Send Mattermost notification
         if: always()
@@ -89,20 +92,10 @@ jobs:
       github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true && github.event.pull_request.base.ref == 'main'
     
     steps:
-      - name: Deploy to PythonAnywhere via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.PA_HOST }}
-          username: ${{ github.actor }} 
-          key: ${{ secrets.PA_SSH_KEY }}
-          script: |
-            cd /home/${{ github.actor }}/my-project-dir 
-            git pull origin main
-            source myenv/bin/activate                
-            pip install -r requirements.txt
-            python manage.py migrate --noinput
-            python manage.py collectstatic --noinput
-            touch /var/www/${{ github.actor }}_pythonanywhere_com_wsgi.py
+      - name: Reload PythonAnywhere Web App
+        run: |
+          curl -X POST "https://www.pythonanywhere.com/api/v0/user/${{ secrets.PA_USERNAME }}/webapps/${{ secrets.PA_DOMAIN }}/reload/" \
+          -H "Authorization: Token ${{ secrets.PA_API_TOKEN }}"
 
       - name: Send Mattermost Deployment Notification
         if: always()
@@ -110,11 +103,11 @@ jobs:
           if [ "${{ job.status }}" = "success" ]; then
             EMOJI="🚀"
             COLOR="#0000FF"
-            TEXT="**RoboVector Deployment Notification**\n\n${EMOJI} **Status**: Deployed Successfully to PythonAnywhere!"
+            TEXT="**RoboVector Deployment Notification**\n\n${EMOJI} **Status**: Reloaded Successfully on PythonAnywhere!"
           else
             EMOJI="⚠️"
             COLOR="#FFCC00"
-            TEXT="**RoboVector Deployment Notification**\n\n${EMOJI} **Status**: Deployment Failed!"
+            TEXT="**RoboVector Deployment Notification**\n\n${EMOJI} **Status**: Deployment/Reload Failed!"
           fi
           
           curl -X POST -H "Content-Type: application/json" \
