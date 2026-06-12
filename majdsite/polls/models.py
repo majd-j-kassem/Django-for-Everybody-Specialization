@@ -15,7 +15,7 @@ class Answer(models.Model):
     choice_poll = models.IntegerField(default=0)
 
     def __str__(self):
-        return self.choice_text
+        return self.choice_set
     def was_published_recently(self):
         return self.pub_date >= timezone.now() - datetime.timedelta(days=1)
 

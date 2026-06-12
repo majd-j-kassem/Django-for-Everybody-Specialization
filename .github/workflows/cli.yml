@@ -29,8 +29,6 @@ jobs:
           pip install ruff pytest pytest-django bandit
 
       - name: Run Tests (Pytest)
-        env:
-          DATABASE_URL: postgresql://user:password@localhost:5432/robovector_db
         run: pytest
 
       - name: Send Mattermost notification
@@ -95,16 +93,16 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.PA_HOST }}
-          username: ${{ github.actor }} # أو اسم مستخدم PythonAnywhere مباشرة
+          username: ${{ github.actor }} 
           key: ${{ secrets.PA_SSH_KEY }}
           script: |
-            cd /home/${{ github.actor }}/my-project-dir  # استبدل بمجال مشروعك هناك
+            cd /home/${{ github.actor }}/my-project-dir 
             git pull origin main
-            source myenv/bin/activate                  # استبدل باسم بيئتك التخيلية
+            source myenv/bin/activate                
             pip install -r requirements.txt
             python manage.py migrate --noinput
             python manage.py collectstatic --noinput
-            touch /var/www/${{ github.actor }}_pythonanywhere_com_wsgi.py # استبدل باسم ملف الـ WSGI الخاص بك
+            touch /var/www/${{ github.actor }}_pythonanywhere_com_wsgi.py
 
       - name: Send Mattermost Deployment Notification
         if: always()
